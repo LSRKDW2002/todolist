@@ -13,38 +13,67 @@ const TodoApp = () => {
   const [name, setName] = useState("");
   const [isNameSet, setIsNameSet] = useState(false);
   const [isTaskListOpen, setIsTaskListOpen] = useState(true);
-  
+
   // Search and category state
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedCategories, setSelectedCategories] = useState([]);
-  
+
   // Define available categories
   const availableCategories = ["Kerja", "Rumah", "Wajib", "Acara", "Sekolah"];
 
   // Add a new task
-  const handleAddTask = () => {
+  const handleAddTask = async () => {
     if (newTask && selectedCategories.length > 0) {
-      const dateAdded = format(new Date(), "eeee, MMMM do, yyyy h:mm a");
-      const newTaskItem = {
-        id: Date.now(),
+      const task = {
         name: newTask,
-        category: selectedCategories[0], // Only allow first selected category
-        dateAdded,
-        done: false,
+        category: selectedCategories[0],
       };
-      setTasks([...tasks, newTaskItem]);
-      toast.success(`Task "${newTask}" added!`, { autoClose: 2000 });
-      setNewTask("");
-      setSelectedCategories([]);
+
+      try {
+        const response = await fetch('http://localhost:5000/tasks', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(task),
+        });
+
+        const result = await response.json();
+        if (response.ok) {
+          setTasks([...tasks, { id: result.taskId, ...task, done: false, dateAdded: new Date().toLocaleString() }]);
+          toast.success(`Task "${newTask}" added!`, { autoClose: 2000 });
+          setNewTask("");
+          setSelectedCategories([]);
+        } else {
+          toast.error("Failed to add task: " + result.message);
+        }
+      } catch (error) {
+        toast.error("Failed to add task: " + error.message);
+      }
     }
   };
 
   // Delete a task
-  const handleDeleteTask = (id) => {
+  const handleDeleteTask = async (id) => {
     const deletedTask = tasks.find((task) => task.id === id);
-    setTasks(tasks.filter((task) => task.id !== id));
-    toast.error(`Task "${deletedTask.name}" deleted!`, { autoClose: 2000 });
+
+    try {
+      const response = await fetch(`http://localhost:5000/tasks/${id}`, {
+        method: 'DELETE',
+      });
+
+      if (response.ok) {
+        setTasks(tasks.filter((task) => task.id !== id));
+        toast.error(`Task "${deletedTask.name}" deleted!`, { autoClose: 2000 });
+      } else {
+        const result = await response.json();
+        toast.error("Failed to delete task: " + result.message);
+      }
+    } catch (error) {
+      toast.error("Failed to delete task: " + error.message);
+    }
   };
+
 
   // Toggle task completion
   const handleToggleDone = (id) => {
@@ -52,7 +81,7 @@ const TodoApp = () => {
       task.id === id ? { ...task, done: !task.done } : task
     );
     setTasks(updatedTasks);
-    
+
     const completedTask = updatedTasks.find((task) => task.id === id);
     if (completedTask.done) {
       toast.success(`Kamu menyelesaikan "${completedTask.name}" dengan category "${completedTask.category}" !`, { autoClose: 3000 });
@@ -69,17 +98,39 @@ const TodoApp = () => {
   };
 
   // Save edited task
-  const handleSaveEdit = (id) => {
-    const updatedTasks = tasks.map((task) =>
-      task.id === id
-        ? { ...task, name: editedTask }
-        : task
-    );
-    setTasks(updatedTasks);
-    toast.success(`Task "${editedTask}" updated!`, { autoClose: 2000 });
-    setEditingTaskId(null);
-    setEditedTask("");
+  const handleSaveEdit = async (id) => {
+    const updatedTask = {
+      name: editedTask,
+      category: tasks.find((task) => task.id === id).category, // Menjaga kategori yang sama
+    };
+
+    try {
+      const response = await fetch(`http://localhost:5000/tasks/${id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(updatedTask),
+      });
+
+      if (response.ok) {
+        const updatedTasks = tasks.map((task) =>
+          task.id === id ? { ...task, name: editedTask } : task
+        );
+        setTasks(updatedTasks);
+        toast.success(`Task "${editedTask}" updated!`, { autoClose: 2000 });
+        setEditingTaskId(null);
+        setEditedTask("");
+      } else {
+        const result = await response.json();
+        toast.error("Failed to update task: " + result.message);
+      }
+    } catch (error) {
+      toast.error("Failed to update task: " + error.message);
+    }
   };
+
+
 
   // Toggle task list open/close
   const handleToggleTaskList = () => {
@@ -164,11 +215,10 @@ const TodoApp = () => {
                 <button
                   key={category}
                   onClick={() => handleCategoryChange(category)}
-                  className={`px-4 py-2 rounded-lg transition duration-300 ease-in-out ${
-                    selectedCategories.includes(category)
-                      ? "bg-blue-500 text-white"
-                      : "bg-gray-200 text-gray-700"
-                  }`}
+                  className={`px-4 py-2 rounded-lg transition duration-300 ease-in-out ${selectedCategories.includes(category)
+                    ? "bg-blue-500 text-white"
+                    : "bg-gray-200 text-gray-700"
+                    }`}
                 >
                   {category}
                 </button>
@@ -216,9 +266,8 @@ const TodoApp = () => {
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -10 }}
                 transition={{ duration: 0.2 }}
-                className={`flex justify-between items-center border-b py-2 ${
-                  task.done ? "bg-green-100" : ""
-                }`}
+                className={`flex justify-between items-center border-b py-2 ${task.done ? "bg-green-100" : ""
+                  }`}
               >
                 <div className="flex flex-col">
                   <span className={`text-lg ${task.done ? "line-through" : ""}`}>
